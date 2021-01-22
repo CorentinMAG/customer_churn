@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import accuracy_score, confusion_matrix, plot_confusion_matrix, plot_roc_curve, classification_report
+from sklearn.metrics import accuracy_score, confusion_matrix, plot_confusion_matrix, plot_roc_curve, classification_report, recall_score, precision_score
 from sklearn.neighbors import KernelDensity
 from tensorflow.keras import layers, models
+import tensorflow as tf
 
 def fillNan(row):
     tenure = row['tenure']
@@ -146,8 +147,6 @@ def model_evaluation(model, params, tr, ts):
 
     return model
 
-
-
 def build_classifier(input_shape, hidden = []):
 
     model_in = layers.Input( shape = input_shape, dtype = 'float32')
@@ -256,6 +255,16 @@ def plot_reconstruction_errors(x, y, model = None, models = None):
 	sns.kdeplot(error_df.recon_errors[error_df.churn == 1], label = 'Churn', shade = True, clip = (0, 10))
 	plt.xlabel('reconstruction error')
 	plt.legend()
+
+def predict(model, data, threshold):
+    reconstructions = model(data)
+    loss = tf.keras.losses.mae(reconstructions, data)
+    return tf.math.less(loss, threshold)
+
+def print_stats(preds, labels):
+    print("Accuracy = {}".format(accuracy_score(labels, preds)))
+    print("Precision = {}".format(precision_score(labels, preds)))
+    print("Recall = {}".format(recall_score(labels, preds)))
 
 
 def plot_signal(signal, targets = None, figsize = (15, 6), autoclose = True, s = 0.5):
