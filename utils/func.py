@@ -200,39 +200,53 @@ def plot_training_history(history, figsize = (15,6), autoclose = True):
     plt.tight_layout()
 
 
-def build_autoencoder(input_shape, hidden = [15]):
+def build_autoencoder(input_shape, hidden = [15], classification = False, hidden_layers = []):
 
-	hidden = sorted(hidden, reverse = True)
+    hidden = sorted(hidden, reverse = True)
 
-	encoder_in = layers.Input(shape = input_shape, dtype = 'float32')
+    encoder_in = layers.Input(shape = input_shape, dtype = 'float32')
 
-	encoder_hidden = layers.Dense(hidden[0], activation = 'relu')(encoder_in)
-	for h in hidden[1:-1]:
-		encoder_hidden = layers.Dense(h, activation = 'relu')(encoder_hidden)
-	encoder_out = layers.Dense(hidden[-1], activation = 'relu')(encoder_hidden)
+    encoder_hidden = layers.Dense(hidden[0], activation = 'relu')(encoder_in)
+    for h in hidden[1:-1]:
+        encoder_hidden = layers.Dense(h, activation = 'relu')(encoder_hidden)
+    encoder_out = layers.Dense(hidden[-1], activation = 'relu')(encoder_hidden)
 
-	encoder = models.Model(encoder_in, encoder_out, name = 'encoder')
+    encoder = models.Model(encoder_in, encoder_out, name = 'encoder')
 
-	decoder_input = layers.Input(shape = (hidden[-1],), dtype = 'float32')
+    if classification:
+        classification_input_shape = (hidden[-1],)
+        classification_in = layers.Input( shape = classification_input_shape, dtype = 'float32')
+        x = classification_in
+        for h in hidden_layers:
+            x = layers.Dense(h, activation = 'relu')(x)
+        classification_out = layers.Dense(1, activation = 'sigmoid')(x)
+        model = models.Model(classification_in, classification_out)
+        outputs = model(encoder(encoder_in))
+        classifier = models.Model(encoder_in, outputs, name = 'classifier')
+        classifier.compile(optimizer = 'Adam', loss = 'binary_crossentropy', metrics = 'accuracy')
+        return classifier
+    else:
 
-	if len(hidden) > 1:
-		decoder_hidden = layers.Dense(hidden[-2], activation = 'relu')(decoder_input)
-		if len(hidden) > 2:
-			for h in hidden[-3::-1]:
-				decoder_hidden = layers.Dense(h, activation = 'relu')(decoder_hidden)
+        decoder_input = layers.Input(shape = (hidden[-1],), dtype = 'float32')
 
-		decoder_output = layers.Dense(input_shape[0], activation = 'linear')(decoder_hidden)
-	else:
-		decoder_output = layers.Dense(input_shape[0], activation = 'linear')(decoder_input)
+        if len(hidden) > 1:
+            decoder_hidden = layers.Dense(hidden[-2], activation = 'relu')(decoder_input)
+            if len(hidden) > 2:
+                for h in hidden[-3::-1]:
+                    decoder_hidden = layers.Dense(h, activation = 'relu')(decoder_hidden)
 
-	decoder = models.Model(decoder_input, decoder_output, name = 'decoder')
+            decoder_output = layers.Dense(input_shape[0], activation = 'linear')(decoder_hidden)
+        else:
+            decoder_output = layers.Dense(input_shape[0], activation = 'linear')(decoder_input)
 
-	outputs = decoder(encoder(encoder_in))
+        decoder = models.Model(decoder_input, decoder_output, name = 'decoder')
 
-	encoder_decoder = models.Model(encoder_in, outputs, name = 'encoder_decoder')
-	encoder_decoder.compile(optimizer = 'RMSProp', loss = 'mse', metrics = ['accuracy'])
-	
-	return encoder_decoder, encoder, decoder
+        outputs = decoder(encoder(encoder_in))
+
+        encoder_decoder = models.Model(encoder_in, outputs, name = 'encoder_decoder')
+        encoder_decoder.compile(optimizer = 'RMSProp', loss = 'mse', metrics = ['accuracy'])
+    	
+        return encoder_decoder, encoder, decoder
 
 
 def plot_reconstruction_errors(x, y, model = None, models = None):
@@ -266,6 +280,18 @@ def print_stats(preds, labels):
     print("Precision = {}".format(precision_score(labels, preds)))
     print("Recall = {}".format(recall_score(labels, preds)))
 
+def tune_threshold(model, data, thresholds, labels):
+    best_threshold = -1
+    accuracy = -1
+    reconstructions = model(data)
+    loss = tf.keras.losses.mae(reconstructions, data)
+    for threshold in thresholds:
+        t = tf.math.less(loss, threshold)
+        acc = accuracy_score(labels, t)
+        if acc > accuracy:
+            best_threshold = threshold
+            accuracy = acc
+    return best_threshold, accuracy
 
 def plot_signal(signal, targets = None, figsize = (15, 6), autoclose = True, s = 0.5):
     if autoclose:
